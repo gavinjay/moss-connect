@@ -44,7 +44,7 @@ export class PostCallIndex extends Construct {
     this.fn = new NodejsFunction(this, 'Fn', {
       entry: 'src/handlers/post-call-index.ts',
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: 1024,
       timeout: Duration.minutes(5),
       environment: {
@@ -52,7 +52,7 @@ export class PostCallIndex extends Construct {
         MOSS_INDEX_MANIFEST_KEY: props.manifestKey,
         NODE_OPTIONS: '--enable-source-maps',
       },
-      bundling: { minify: true, sourceMap: true, target: 'node20' },
+      bundling: { minify: true, sourceMap: true, target: 'node24' },
     });
 
     this.analysisBucket.grantRead(this.fn);

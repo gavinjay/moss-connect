@@ -1,0 +1,20 @@
+[
+  { "query": "How do I request a refund?", "expected": ["refund-window"] },
+  { "query": "how long do I have to return something", "expected": ["refund-window"] },
+  { "query": "can I get my money back on a gift card", "expected": ["refund-exceptions"] },
+  { "query": "is clearance stuff returnable", "expected": ["refund-exceptions"] },
+  { "query": "How long does standard shipping take?", "expected": ["shipping-standard"] },
+  { "query": "when will my package get here normal delivery", "expected": ["shipping-standard"] },
+  { "query": "can I pay to get it faster", "expected": ["shipping-expedited"] },
+  { "query": "do you ship outside the US", "expected": ["shipping-international"] },
+  { "query": "who pays customs", "expected": ["shipping-international"] },
+  { "query": "Can I change the address on an order already placed?", "expected": ["order-change-address"] },
+  { "query": "I need to cancel my order", "expected": ["order-cancel"] },
+  { "query": "where is my tracking number", "expected": ["order-tracking"] },
+  { "query": "I forgot my password", "expected": ["account-password"] },
+  { "query": "how do I delete my account", "expected": ["account-close"] },
+  { "query": "is my broken screen covered", "expected": ["warranty-coverage", "warranty-claim"] },
+  { "query": "what do I need to claim warranty", "expected": ["warranty-claim"] },
+  { "query": "do you take apple pay", "expected": ["payment-methods"] },
+  { "query": "my card keeps getting declined", "expected": ["payment-declined"] }
+]

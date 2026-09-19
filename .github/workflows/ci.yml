@@ -26,15 +26,21 @@ jobs:
       - name: Test
         run: npm test
 
-      # Guards the fail-closed contract: a synth with cdk.json's blank
-      # connectInstanceArn MUST fail. If this ever succeeds, a required deploy
+      # Guards the fail-closed contract: cdk.json ships with a blank
+      # connect.instanceAlias (it must be globally unique, so it cannot have a
+      # default), and synth MUST refuse. If this ever succeeds, a required deploy
       # input has grown a silent default.
-      - name: Assert synth fails closed without a Connect instance ARN
+      - name: Assert synth fails closed without a Connect instance alias
         run: |
           if npm run cdk:synth --silent > /tmp/synth.log 2>&1; then
-            echo "::error::cdk synth succeeded without connectInstanceArn -- a required input has a silent default"
+            echo "::error::cdk synth succeeded with a blank instanceAlias -- a required input has a silent default"
             exit 1
           fi
-          grep -q "connectInstanceArn" /tmp/synth.log || {
+          grep -q "instanceAlias" /tmp/synth.log || {
             echo "::error::synth failed for an unexpected reason:"; cat /tmp/synth.log; exit 1; }
           echo "synth failed closed as expected"
+
+      # The control arm must produce real numbers on a clean runner. Also proves
+      # the harness itself has not rotted.
+      - name: Benchmark smoke (lexical control)
+        run: npm run bench -- --mode local --arms lexical --iterations 5

@@ -23,6 +23,10 @@ export const Metric = {
   IndexStale: 'Index.Stale',
   /** A successful, in-budget retrieval. Denominator for the rate maths. */
   RetrievalSuccess: 'Retrieval.Success',
+  /** Observed end-to-end handler latency. The headline benchmark number. */
+  RetrievalLatency: 'Retrieval.LatencyMs',
+  /** Index hydration time at init. Where an in-process arm pays for its speed. */
+  IndexLoadMs: 'Index.LoadMs',
   /** Handler fell back to the escalation path instead of answering. */
   FallbackToAgent: 'Retrieval.FallbackToAgent',
 } as const;
@@ -31,6 +35,11 @@ export type MetricName = (typeof Metric)[keyof typeof Metric];
 
 export interface MetricDimensions {
   readonly Surface: 'VoiceRetrieval' | 'AgentAssist' | 'PostCall';
+  /**
+   * Which retrieval implementation served this. Without it the three benchmark
+   * arms pile into one undifferentiated metric and the comparison is unreadable.
+   */
+  readonly RetrievalArm?: string;
   readonly IndexVersion?: string;
 }
 

@@ -11,7 +11,7 @@ Amazon Connect ↔ Moss integration. One manual; keep it here, don't fork it.
 | AWS profile | `claude-sandbox` |
 | Account | `576872909007` |
 | **Region** | **`us-west-2`** |
-| Stack | `MossConnectStack` |
+| Stacks | `ConnectFoundationStack` (deploy once) + `MossConnectStack` (iterate) |
 
 ```bash
 AWS_PROFILE=claude-sandbox AWS_REGION=us-west-2 aws <cmd>
@@ -69,8 +69,9 @@ Consequences, all load-bearing:
 ## Build / test / deploy
 
 ```bash
-npm run typecheck       # tsc --noEmit
-npm test                # 67 tests, incl. fast-check property tests + stack synth
+npm run typecheck       # tsc --noEmit (covers bin/ lib/ src/ scripts/)
+npm test                # 101 tests, incl. fast-check property tests + two-stack synth
+npm run bench -- --mode local --arms lexical   # needs no AWS
 npm run cdk:synth
 npm run cdk:diff        # and actually read the [-] lines
 npm run cdk:deploy
@@ -129,6 +130,20 @@ synthesizes.
 8. **Write the index artifact before the manifest.** A manifest pointing at an
    object that does not exist yet takes every consumer down on its next cold
    start.
+9. **The `moss` arm never falls back to the lexical stub.** `retrieverFor()`
+   throws when no SDK bindings are supplied. A benchmark that reports "moss"
+   numbers for a word-overlap scorer is worse than no benchmark.
+10. **`bedrock-kb` does network I/O inside `retrieve()` on purpose.** Everywhere
+    else that is a bug; there it is the measurement. Don't "fix" it with a cache,
+    and don't copy the pattern into another arm.
+11. **Arms must be sized identically.** Same memory, same timeout, same region, or
+    the benchmark measures Lambda rather than retrieval. A stack test asserts it.
+12. **The Connect instance and phone number live in the foundation stack.** Never
+    move them into the app stack — a rollback there would destroy the demo line.
+13. **`scripts/` is inside the typecheck.** It was not originally, and the
+    benchmark harness broke without `tsc` noticing.
+14. **Lambda runtime is nodejs24.x.** nodejs20.x is deprecated with creation
+    disabled from 2027-02-01.
 
 ---
 

@@ -38,7 +38,7 @@ export class AgentAssist extends Construct {
     this.fn = new NodejsFunction(this, 'Fn', {
       entry: 'src/handlers/agent-assist.ts',
       handler: 'handler',
-      runtime: lambda.Runtime.NODEJS_20_X,
+      runtime: lambda.Runtime.NODEJS_24_X,
       memorySize: props.memoryMb,
       timeout: Duration.seconds(30),
       environment: {
@@ -46,7 +46,7 @@ export class AgentAssist extends Construct {
         MOSS_INDEX_MANIFEST_KEY: props.manifestKey,
         NODE_OPTIONS: '--enable-source-maps',
       },
-      bundling: { minify: true, sourceMap: true, target: 'node20' },
+      bundling: { minify: true, sourceMap: true, target: 'node24' },
     });
 
     props.indexBucket.grantRead(this.fn);

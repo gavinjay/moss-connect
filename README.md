@@ -60,13 +60,49 @@ just moves the index load onto a caller's first word.
 
 | Surface | Path | Status |
 |---|---|---|
-| **1. Self-service voice retrieval** | Contact flow → Lambda → in-process index → answer to caller | Built, tested |
-| **2. Real-time agent assist** | Contact Lens real-time → Kinesis → retrieval → suggestion to agent | Built, delivery seam open |
+| **1. Self-service voice retrieval** | Contact flow → Lambda → retrieval → answer to caller | Built, one Lambda + flow **per benchmark arm** |
+| **2. Real-time agent assist** | Contact Lens real-time → Kinesis → retrieval → suggestion | Built, delivery seam open |
 | **3. Post-call enrichment** | Contact Lens analysis in S3 → Q/A documents → new versioned index | Built, tested |
 
-Surface 2 has a better version that this repo does **not** yet implement: because
-Moss runs in the browser via WASM, holding the index in the *agent's browser* and
-retrieving locally beats any server-side path. See `docs/ARCHITECTURE.md`.
+Surface 2 has a better version this repo does **not** implement: because Moss runs
+in the browser via WASM, holding the index in the *agent's* browser and retrieving
+locally beats any server-side path. See `docs/ARCHITECTURE.md`.
+
+---
+
+## Three benchmark arms
+
+`benchmark.arms` in `cdk.json` decides what gets deployed. Each arm gets its own
+Lambda, its own cold-start profile and its own dialable contact flow.
+
+| Arm | What it is | Role |
+|---|---|---|
+| `bedrock-kb` | Bedrock Knowledge Base — managed vector store over a network call | What a Connect customer deploys today. The arm Moss must beat. |
+| `lexical` | In-process word overlap. Not Moss. | **The control** that makes a Moss win attributable. |
+| `moss` | In-process Moss | The product. |
+
+`docs/BENCHMARK.md` has the methodology and the first result. Run it with no AWS
+account at all:
+
+```bash
+npm run bench -- --mode local --arms lexical --iterations 50
+```
+
+The `moss` arm **fails loudly** until the SDK is bound. It will not silently fall
+back to the lexical stub.
+
+---
+
+## Two stacks, deliberately
+
+| Stack | Contents | Cadence |
+|---|---|---|
+| `ConnectFoundationStack` | Connect instance, phone number, queue, hours, routing profile | Deploy once, leave alone |
+| `MossConnectStack` | Retrieval Lambdas, index store, contact flows, Contact Lens wiring | Iterate freely |
+
+Connect instances take minutes to create, deleted aliases linger, and a claimed
+phone number is a real billed resource. A rolled-back Lambda change must not be
+able to take the demo line with it.
 
 ---
 
@@ -75,18 +111,22 @@ retrieving locally beats any server-side path. See `docs/ARCHITECTURE.md`.
 ```bash
 npm install
 npm run typecheck
-npm test              # 67 tests, incl. property tests and a full stack synth
-npm run cdk:synth     # fails until cdk.json names your Connect instance
+npm test              # 101 tests, incl. property tests and a full two-stack synth
+npm run bench -- --mode local --arms lexical   # real numbers, no AWS needed
+npm run cdk:synth     # fails until cdk.json names a unique instance alias
 ```
 
-Before the first synth succeeds, set `mossConnect.connectInstanceArn` in
-`cdk.json`. It is intentionally blank: a missing required input fails loudly here
-rather than deploying something subtly wrong.
+Before the first synth succeeds, set `mossConnect.connect.instanceAlias` in
+`cdk.json`. It is blank on purpose — a Connect instance alias must be **globally
+unique across AWS**, so it cannot have a sensible default, and a collision fails
+the deploy several minutes in.
 
 ```bash
 npm run cdk:diff      # read the [-] lines
-npm run cdk:deploy
+npm run cdk:deploy    # ConnectFoundationStack first, then MossConnectStack
 ```
+
+`docs/DEPLOY.md` is the runbook, including what still has to be done by hand.
 
 ---
 

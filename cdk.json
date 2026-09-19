@@ -1,14 +1,36 @@
 {
   "app": "npx ts-node --prefer-ts-exts bin/moss-connect.ts",
   "watch": {
-    "include": ["**"],
-    "exclude": ["README.md", "cdk*.json", "**/*.d.ts", "**/*.js", "tsconfig.json", "package*.json", "yarn.lock", "node_modules", "test"]
+    "include": [
+      "**"
+    ],
+    "exclude": [
+      "README.md",
+      "cdk*.json",
+      "**/*.d.ts",
+      "**/*.js",
+      "tsconfig.json",
+      "package*.json",
+      "yarn.lock",
+      "node_modules",
+      "test"
+    ]
   },
   "context": {
     "mossConnect": {
       "region": "us-west-2",
-      "connectInstanceArn": "",
-      "contactLensRealtimeEnabled": true,
+      "connect": {
+        "instanceAlias": "",
+        "existingInstanceArn": "",
+        "inboundCalls": true,
+        "outboundCalls": false,
+        "phoneNumber": {
+          "enabled": true,
+          "countryCode": "US",
+          "type": "DID",
+          "description": "moss-connect benchmark demo line"
+        }
+      },
       "voiceRetrieval": {
         "latencyBudgetMs": 120,
         "provisionedConcurrency": 2,
@@ -18,6 +40,14 @@
       "indexStore": {
         "retainOnDelete": true,
         "manifestKey": "manifests/current.json"
+      },
+      "benchmark": {
+        "arms": [
+          "lexical",
+          "moss",
+          "bedrock-kb"
+        ],
+        "bedrockKnowledgeBaseId": ""
       },
       "tags": {
         "project": "Moss-Connect",

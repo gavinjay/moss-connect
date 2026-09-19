@@ -10,78 +10,65 @@ export AWS_PROFILE=claude-sandbox
 export AWS_REGION=us-west-2
 ```
 
-## One-time prerequisites (manual — not CloudFormation)
+## What you must decide before deploying
 
-These cannot be created by this stack, and skipping them produces silence rather
-than an error.
+Only two values, both in `cdk.json`:
 
-1. **An Amazon Connect instance** in `us-west-2`. Note its ARN.
-2. **Put the instance ARN in `cdk.json`** under
-   `context.mossConnect.connectInstanceArn`. The synth fails until you do — by
-   design. Do **not** pass it with `-c`: a value that only exists on one machine
-   is a value the next deploy drops silently.
-3. **CDK bootstrap** in the target account/region, if not already done:
-   ```bash
-   npx cdk bootstrap aws://576872909007/us-west-2
-   ```
+1. **`connect.instanceAlias`** — globally unique across all of AWS. Blank by
+   design; the synth refuses until you choose one. A collision fails the deploy
+   several minutes in, so pick something distinctive.
+2. **`benchmark.arms`** — which arms to deploy. `bedrock-kb` additionally needs
+   `benchmark.bedrockKnowledgeBaseId`, and the synth refuses if it is missing.
+
+Then bootstrap, if you have not already:
+
+```bash
+npx cdk bootstrap aws://576872909007/us-west-2
+```
 
 ## Deploy
 
 ```bash
 npm install
 npm run typecheck
-npm test                 # must be green; includes a full stack synth
+npm test                 # must be green; includes a full two-stack synth
 npm run cdk:synth
-npm run cdk:diff         # READ THE [-] LINES. Both of this codebase's
-                         # predecessors shipped a silent regression that was
-                         # invisible in code review and obvious in one diff.
-npm run cdk:deploy
+npm run cdk:diff         # READ THE [-] LINES.
+npm run cdk:deploy       # foundation first, then the app stack
 ```
 
-Record the stack outputs: `IndexBucketName`, `VoiceRetrievalAliasArn`,
-`AnalysisBucketName`, `TranscriptStreamName`.
+Foundation takes several minutes — Connect instance creation is slow. Record the
+outputs: `DemoPhoneNumber`, `ConnectInstanceArn`, `EscalationQueueArn`,
+`ConnectConsoleUrl`, then the app stack's `Arm*FlowArn` and `Arm*AliasArn`.
 
-## Post-deploy wiring (also manual)
+## Still manual after deploy
 
 ### 1. Seed an index
 
-Nothing retrieves until an index and a manifest exist. The voice Lambda's init
-fails, emits `Index.LoadFailed`, and every call escalates — which is the designed
-behaviour, not a bug, but it means a fresh stack deflects nothing.
+Nothing retrieves until an index and manifest exist. The in-process arms' init
+fails, emits `Index.LoadFailed`, and every call escalates — designed behaviour, but
+a fresh stack deflects nothing. `bench/corpus.json` is a reasonable first corpus.
 
-Build a first index from a document set, upload the artifact, then the manifest
-(artifact **first** — a manifest naming a missing object breaks every consumer's
-next cold start).
+Upload the **artifact first, manifest second**. A manifest naming a missing object
+breaks every consumer's next cold start.
 
-### 2. Author the contact flow
+### 2. Point the phone number at an arm's flow
 
-Add an **Invoke AWS Lambda function** block pointing at the
-`VoiceRetrievalAliasArn` output, and pass the caller's utterance as the `query`
-parameter.
+The flows are created; associating the claimed number with one of them is a
+console step (or `associate-phone-number-contact-flow`). Point it at whichever arm
+you are demonstrating — that is how you switch arms mid-demo without redeploying.
 
-Read the result in the flow as:
+### 3. Create an agent login
 
-- `$.External.resolved` — `true` when there is a confident answer
-- `$.External.answer` — the text to read out
-- `$.External.escalate` — `true` when it should route to a human
-- `$.External.index_version`, `$.External.retrieval_ms` — for debugging a bad answer
+`ConnectFoundationStack` builds the routing profile and queue but no users. Create
+one agent in the console to exercise escalation and agent assist.
 
-Branch on `escalate` before playing `answer`.
+### 4. Bedrock Knowledge Base, if running that arm
 
-### 3. Enable Contact Lens real-time (only for agent assist)
-
-Real-time analytics is a **contact-flow / instance setting**, not a CFN resource.
-Enable it on the instance and set the flow's analytics block to stream to the
-`TranscriptStreamName` output.
-
-If this step is skipped the agent-assist Lambda simply never fires. There is no
-error. Confirm with a test call and check the Lambda's invocation count.
-
-### 4. Point Contact Lens post-call output at the analysis bucket
-
-Post-call analysis must land under the `Analysis/` prefix of the
-`AnalysisBucketName` bucket, with a `.json` suffix, or the S3 notification will
-not match and no index ever gets rebuilt.
+Not created by this stack: its OpenSearch Serverless vector index is not a
+CloudFormation resource, so it needs the console or a custom resource. Create it,
+ingest the same corpus as the other arms — a different corpus measures nothing —
+then put its id in `cdk.json`.
 
 ## Verifying it actually works
 

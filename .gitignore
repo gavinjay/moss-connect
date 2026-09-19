@@ -15,3 +15,6 @@ coverage/
 # Moss index artifacts are build output, never source
 index-artifacts/
 *.moss
+
+# Benchmark output is generated, not source
+bench/results.json
