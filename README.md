@@ -122,9 +122,14 @@ unique across AWS**, so it cannot have a sensible default, and a collision fails
 the deploy several minutes in.
 
 ```bash
+npm run preflight     # verifies you are pointed at the right AWS account
 npm run cdk:diff      # read the [-] lines
 npm run cdk:deploy    # ConnectFoundationStack first, then MossConnectStack
 ```
+
+`preflight` runs automatically before `cdk:diff` and `cdk:deploy`. It takes about
+a second and fails before CDK spends time bundling three Lambdas, which is what
+used to happen on a credential mistake.
 
 `docs/DEPLOY.md` is the runbook, including what still has to be done by hand.
 

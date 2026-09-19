@@ -17,16 +17,25 @@ cross-account stack. An earlier version did exactly that: `cdk diff` reported
 `Stack ConnectFoundationStack (aws://394125495069/us-west-2)` while every Connect
 reference pointed at `184670915146`, and nothing complained.
 
-Confirm before every deploy:
+Check it with one command, which substitutes nothing by hand:
 
 ```bash
-export MOSS_PROFILE=your-profile-name      # the one for 184670915146
-export AWS_PROFILE="$MOSS_PROFILE" AWS_REGION=us-west-2
-aws sts get-caller-identity                # Account MUST read 184670915146
+# `git -C` works from any directory -- no cd that can fail and swallow the pull.
+git -C ~/moss-connect pull
+cd ~/moss-connect
+npm install
+
+# Prints the target account and, if your credentials are wrong, lists YOUR real
+# profile names with the account each resolves to plus the exact export line.
+npm run preflight
 ```
 
-Do not paste a command containing `<angle brackets>` into zsh -- it reads them as
-redirects and silently fails to set the variable.
+Once preflight says OK:
+
+```bash
+npm run cdk:diff     # preflight runs again automatically first
+npm run cdk:deploy
+```
 
 ## Region
 

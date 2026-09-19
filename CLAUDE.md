@@ -144,6 +144,15 @@ synthesizes.
     benchmark harness broke without `tsc` noticing.
 14. **Lambda runtime is nodejs24.x.** nodejs20.x is deprecated with creation
     disabled from 2027-02-01.
+15. **The target account comes from the Connect instance ARN, never from
+    `CDK_DEFAULT_ACCOUNT`.** Three accounts are in play (184670915146 holds the
+    Connect instance; 394125495069 and 576872909007 do not). Taking it from the
+    environment once synthesized a cross-account stack that looked completely
+    normal. A mismatch is fatal at synth.
+16. **Never put a placeholder inside a runnable command block.** `<angle
+    brackets>` are read by zsh as redirects, and a realistic-looking fake profile
+    name gets pasted verbatim. Write commands that DISCOVER the value instead --
+    that is what `scripts/preflight.sh` is for.
 
 ---
 
