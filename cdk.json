@@ -29,7 +29,8 @@
           "countryCode": "US",
           "type": "DID",
           "description": "moss-connect benchmark demo line"
-        }
+        },
+        "_comment_existingInstanceArn": "trackit-demo was created by hand in the us-west-2 console. Paste its ARN here (arn:aws:connect:us-west-2:576872909007:instance/<INSTANCE_ID>) so CDK ADOPTS it. Do NOT instead set instanceAlias to \"trackit-demo\": that makes CDK try to CREATE a second instance with an alias that is already taken, and the deploy fails minutes in."
       },
       "voiceRetrieval": {
         "latencyBudgetMs": 120,

@@ -2,11 +2,17 @@
 
 ## Why three arms, not two
 
-| Arm | What it is | What it isolates |
-|---|---|---|
-| `bedrock-kb` | Bedrock Knowledge Base — managed vector store behind a network call | What an Amazon Connect customer deploys **today**. The arm Moss must beat. |
-| `lexical` | In-process IDF-weighted word overlap. Not Moss. | **The control.** In-process but not semantic. |
-| `moss` | In-process Moss (Rust/WASM) | The product. |
+| Arm | What it is | What it isolates | Runs locally? |
+|---|---|---|---|
+| `lexical` | Word-overlap matching. No AI. | The floor. What you get with no semantics at all. | Yes |
+| `local-embed` | MiniLM sentence embeddings + brute-force cosine, all in-process | **"Why do I need Moss?"** Semantic and in-process and free. | Yes |
+| `bedrock-kb` | Bedrock Knowledge Base — managed vector store behind a network call | What a Connect customer deploys **today**. | Needs AWS |
+| `moss` | In-process Moss (Rust/WASM) | The product. | Needs the SDK |
+
+`local-embed` is the arm that matters most. Any competent engineer evaluating Moss
+will say *"I can embed with MiniLM locally and do a dot product."* If Moss cannot
+beat that, Moss has no story. It is semantic like Moss, in-process like Moss, and
+free — so it isolates exactly what Moss adds over the obvious DIY approach.
 
 The two comparisons that matter:
 
@@ -35,37 +41,58 @@ The `moss` arm **fails loudly** until the real SDK is bound. It will not fall ba
 to the lexical stub: a benchmark that prints "moss" numbers for a word-overlap
 scorer is worse than no benchmark.
 
-## First result (lexical control, 14-document corpus, 18 labeled questions)
+## Results so far
+
+**14 documents, 18 labeled questions, warm:**
 
 ```
-arm          n      p50      p90      p99      max    load    R@1    R@3
-lexical        900    0.01    0.01    0.03    2.65       1    50%    67%
+arm            n      p50      p90      p99      max  embed%     load    R@1    R@3
+lexical         360    0.01    0.02    0.04    0.06       -        1    50%    67%
+local-embed     360    1.86    2.20    4.42    6.37     99%      334   100%   100%
 ```
 
-Read this carefully, because it reframes the pitch for a corpus this size:
+**1,400 documents (100x padding), warm:**
 
-**Latency is not the interesting axis here.** Word overlap across 14 documents
-takes 0.01ms — already three orders of magnitude under Moss's 10ms headline. On a
-small corpus, in-process retrieval of *any* kind is effectively free, and Moss
-cannot win a speed argument against a number that is already zero.
+```
+local-embed      90    3.55    3.91    7.98    7.98     57%     5621   100%   100%
+```
 
-**Quality is the axis.** The control answers only **50% of paraphrased questions
-correctly at rank 1**. Every miss is lexical: "how long do I have to return
-something" shares almost no vocabulary with a passage about refund windows. That
-50% is the number Moss has to beat, and it is a fair, defensible baseline to
-quote.
+Three findings, and none of them flatter the premise at this scale:
 
-So for a demo at this scale, the Moss story is *semantic recall at in-process
-latency* — not raw speed. Raw speed only becomes the story against `bedrock-kb`,
-where the network hop puts 30–80ms on the board.
+**1. Free local embeddings already get 100%.** MiniLM answers every paraphrased
+question correctly. There is no quality headroom left for Moss to win on a corpus
+this easy — the test is too small to discriminate.
 
-## Corpus size is a first-class variable
+**2. Embedding the query dominates, not searching.** At 14 documents, **99%** of
+`retrieve()` is turning the question into a vector. The actual similarity search
+is ~0.02ms. This is the single most important question to put to Moss: *does
+"sub-10ms" include embedding the query, or only the search?* If it excludes
+embedding, Moss's search is competing against a number that is already effectively
+zero. If it includes embedding, Moss at 10ms is **slower** than this free setup at
+1.86ms. Either answer is informative.
 
-Latency differences between in-process arms only emerge at scale. A linear scan of
-14 documents is free; a scan of 100,000 is not, and that is precisely where an
-indexed structure earns its keep. Before quoting latency, run at several corpus
-sizes (1k / 10k / 100k) and show the curve. A single small-corpus number will
-understate Moss and an ML founder will know it.
+**3. Load time is the real problem, and it grows fast.** 334ms at 14 documents,
+**5.6 seconds** at 1,400. Extrapolated to 100k documents that is minutes of
+embedding before the first call can be served — which is exactly why an index must
+be *prebuilt and loaded from bytes* rather than constructed at startup. See
+question 1 in `docs/MOSS_QUESTIONS.md`; it is now the most load-bearing question
+on the list.
+
+## Corpus size is the variable that decides this
+
+```bash
+npm run bench -- --arms local-embed --scale 100 --iterations 5
+```
+
+`--scale` pads the corpus with synthetic distractors. Recall becomes indicative
+only (the filler is generated), but the **latency curve is honest**, and that
+curve is the whole argument: search grew from ~0.02ms to ~1.5ms as the corpus grew
+100x, while embedding stayed flat. Extrapolate and brute force loses — somewhere
+above ~100k documents a purpose-built index has to win.
+
+**That crossover point is where Moss's value lives, and this repo cannot currently
+find it** because there is no 100k-document corpus to test against. Getting one is
+the highest-value next step for the benchmark.
 
 ## Cold vs warm: report both or neither
 

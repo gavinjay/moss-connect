@@ -28,7 +28,8 @@ import { resolve } from 'node:path';
 import type { MossDocument, MossRetriever } from '../src/moss/retriever';
 import { StubRetriever } from '../src/moss/stub-retriever';
 import { BedrockKbRetriever } from '../src/moss/bedrock-kb-retriever';
-import { isRetrievalArm, type RetrievalArmName } from '../src/config/deploy-config';
+import { LocalEmbedRetriever } from '../src/moss/local-embed-retriever';
+import { isBenchArm, type BenchArmName } from '../src/config/deploy-config';
 
 interface Question {
   readonly query: string;
@@ -38,6 +39,7 @@ interface Question {
 interface Sample {
   readonly query: string;
   readonly elapsedMs: number;
+  readonly embedMs: number | null;
   readonly topId: string | null;
   readonly top3: readonly string[];
 }
@@ -80,8 +82,31 @@ function summarise(arm: string, samples: readonly Sample[], loadMs: number | nul
   };
 }
 
+/**
+ * Pads the corpus with synthetic distractor documents.
+ *
+ * The real documents stay first and keep their ids, so recall is still
+ * computable -- but the filler is generated, not real, so treat recall at scale
+ * as indicative only. What this DOES measure honestly is how search cost grows
+ * with corpus size, which is the only axis on which an index beats a linear scan.
+ */
+function padCorpus(base: readonly MossDocument[], scale: number): MossDocument[] {
+  const topics = ['billing', 'devices', 'network', 'roaming', 'plans', 'outages', 'security'];
+  const padded: MossDocument[] = [...base];
+  const target = base.length * scale;
+  for (let i = padded.length; i < target; i++) {
+    const topic = topics[i % topics.length];
+    padded.push({
+      id: `filler-${i}`,
+      text: `Regarding ${topic}, policy note ${i}: customers should review the ${topic} section of their agreement for terms covering item ${i % 97} and related conditions.`,
+      metadata: { locale: 'en-US', topic },
+    });
+  }
+  return padded;
+}
+
 async function runLocalArm(
-  arm: RetrievalArmName,
+  arm: BenchArmName,
   corpus: readonly MossDocument[],
   questions: readonly Question[],
   iterations: number,
@@ -89,6 +114,8 @@ async function runLocalArm(
   let retriever: MossRetriever;
   if (arm === 'lexical') {
     retriever = new StubRetriever();
+  } else if (arm === 'local-embed') {
+    retriever = new LocalEmbedRetriever();
   } else if (arm === 'bedrock-kb') {
     const kbId = process.env.MOSS_BEDROCK_KB_ID;
     if (!kbId) throw new Error('bedrock-kb arm needs MOSS_BEDROCK_KB_ID (and AWS credentials)');
@@ -118,6 +145,7 @@ async function runLocalArm(
         samples.push({
           query: q.query,
           elapsedMs: res.elapsedMs,
+          embedMs: res.breakdown?.embedMs ?? null,
           topId: res.hits[0]?.id ?? null,
           top3: res.hits.slice(0, 3).map((h) => h.id),
         });
@@ -144,30 +172,37 @@ function report(results: readonly ArmResult[], iterations: number): string {
   lines.push('');
   lines.push(`Retrieval benchmark -- ${iterations} iteration(s) over ${results[0]?.samples.length ?? 0} samples/arm`);
   lines.push('');
-  lines.push('arm          n      p50      p90      p99      max    load    R@1    R@3   err');
-  lines.push('---------------------------------------------------------------------------------');
+  lines.push('arm            n      p50      p90      p99      max  embed%     load    R@1    R@3');
+  lines.push('-------------------------------------------------------------------------------------');
   for (const r of results) {
     const sorted = [...r.samples.map((s) => s.elapsedMs)].sort((a, b) => a - b);
     const f = (n: number) => (Number.isFinite(n) ? n.toFixed(2).padStart(7) : '      -');
     const pct = (n: number) => (Number.isFinite(n) ? `${(n * 100).toFixed(0)}%`.padStart(6) : '     -');
+    const embeds = r.samples.map((s) => s.embedMs).filter((v): v is number => v !== null);
+    const embedShare =
+      embeds.length === 0
+        ? '      -'
+        : `${((embeds.reduce((a, b) => a + b, 0) / r.samples.reduce((a, s) => a + s.elapsedMs, 0)) * 100).toFixed(0)}%`.padStart(7);
     lines.push(
       [
-        r.arm.padEnd(12),
+        r.arm.padEnd(13),
         String(sorted.length).padStart(5),
         f(percentile(sorted, 50)),
         f(percentile(sorted, 90)),
         f(percentile(sorted, 99)),
         f(sorted[sorted.length - 1] ?? NaN),
-        (r.loadMs === null ? '-' : r.loadMs.toFixed(0)).padStart(7),
+        embedShare,
+        (r.loadMs === null ? '-' : r.loadMs.toFixed(0)).padStart(8),
         pct(r.recallAt1),
         pct(r.recallAt3),
-        String(r.errors).padStart(5),
       ].join(' '),
     );
   }
   lines.push('');
   lines.push('p50/p90/p99/max and load are milliseconds. R@1/R@3 are recall against the');
   lines.push('labeled set in bench/questions.json -- latency without quality is half an argument.');
+  lines.push('embed% is how much of retrieve() went to embedding the QUERY -- unavoidable on the');
+  lines.push('hot path for any vector retriever, and the thing a headline number can quietly omit.');
   lines.push('');
   lines.push('CAVEATS that belong on any chart built from this:');
   lines.push('  - These are WARM, in-process numbers. Cold start is a separate measurement.');
@@ -185,14 +220,21 @@ async function main(): Promise<void> {
   };
   const mode = get('--mode', 'local')!;
   const iterations = Number(get('--iterations', '50'));
-  const armArgs = (get('--arms', 'lexical') ?? 'lexical')
+  // Corpus size is the variable that decides this whole question. A brute-force
+  // cosine scan over 14 documents is free; over 100,000 it is not, and that gap
+  // is the only place a purpose-built index can earn its keep. Padding is
+  // synthetic filler -- it makes the LATENCY curve honest, not the recall.
+  const scale = Math.max(1, Number(get('--scale', '1')));
+  const armArgs = (get('--arms', 'lexical,local-embed') ?? '')
     .split(',')
     .map((a) => a.trim())
     .filter((a) => a !== '');
   for (const a of armArgs) {
-    if (!isRetrievalArm(a)) throw new Error(`unknown arm: ${a}. Valid: lexical, moss, bedrock-kb`);
+    if (!isBenchArm(a)) {
+      throw new Error(`unknown arm: ${a}. Valid: lexical, local-embed, moss, bedrock-kb`);
+    }
   }
-  const arms = armArgs as RetrievalArmName[];
+  const arms = armArgs as BenchArmName[];
 
   if (mode !== 'local') {
     console.error(
@@ -204,7 +246,14 @@ async function main(): Promise<void> {
   }
 
   const root = resolve(__dirname, '..');
-  const corpus = JSON.parse(readFileSync(resolve(root, 'bench/corpus.json'), 'utf8')) as MossDocument[];
+  const baseCorpus = JSON.parse(readFileSync(resolve(root, 'bench/corpus.json'), 'utf8')) as MossDocument[];
+  const corpus = scale > 1 ? padCorpus(baseCorpus, scale) : baseCorpus;
+  if (scale > 1) {
+    console.log(
+      `corpus padded ${baseCorpus.length} -> ${corpus.length} documents. ` +
+        'Filler is synthetic: latency numbers are meaningful, recall is not.',
+    );
+  }
   const questions = JSON.parse(readFileSync(resolve(root, 'bench/questions.json'), 'utf8')) as Question[];
 
   const results: ArmResult[] = [];

@@ -9,12 +9,28 @@ import { assertConnectRegion, type ConnectRegion } from './regions';
  * time if absent.
  */
 
-/** The three retrieval implementations the benchmark compares. */
+/** Arms that can be DEPLOYED as Lambdas. */
 export const RETRIEVAL_ARMS = ['lexical', 'moss', 'bedrock-kb'] as const;
 export type RetrievalArmName = (typeof RETRIEVAL_ARMS)[number];
 
+/**
+ * Arms that only run in the local harness.
+ *
+ * `local-embed` carries a ~90MB ONNX model. Putting that in a Lambda is a real
+ * option but a separate conversation (layer vs EFS, cold-start cost), so it is
+ * deliberately not deployable yet -- and the CDK arm list stays honest about
+ * what it can actually ship.
+ */
+export const BENCH_ONLY_ARMS = ['local-embed'] as const;
+export type BenchOnlyArmName = (typeof BENCH_ONLY_ARMS)[number];
+export type BenchArmName = RetrievalArmName | BenchOnlyArmName;
+
 export function isRetrievalArm(value: string): value is RetrievalArmName {
   return (RETRIEVAL_ARMS as readonly string[]).includes(value);
+}
+
+export function isBenchArm(value: string): value is BenchArmName {
+  return isRetrievalArm(value) || (BENCH_ONLY_ARMS as readonly string[]).includes(value);
 }
 
 export interface PhoneNumberConfig {

@@ -49,6 +49,16 @@ export interface RetrieveResult {
   readonly elapsedMs: number;
   /** Index version that served this query, for attributing a bad answer to a bad index. */
   readonly indexVersion: string;
+  /**
+   * Optional split of where `elapsedMs` went.
+   *
+   * This matters more than it looks. Any embedding-based retriever must turn the
+   * query into a vector BEFORE it can search, and that embedding happens on the
+   * hot path. A headline "sub-10ms retrieval" number that excludes it is not the
+   * latency a caller experiences. Arms that can separate the two report it here
+   * so the comparison is about the same thing.
+   */
+  readonly breakdown?: { readonly embedMs: number; readonly searchMs: number };
 }
 
 export type RetrieverState = 'unloaded' | 'loading' | 'ready' | 'failed';
