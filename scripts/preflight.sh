@@ -35,6 +35,22 @@ CURRENT=$(aws sts get-caller-identity --query Account --output text 2>/dev/null 
 
 if [ "$CURRENT" = "$TARGET_ACCOUNT" ]; then
   echo "preflight: OK -- current credentials are for $CURRENT"
+
+  # CDK needs its bootstrap roles in the target account+region. Without them the
+  # diff silently degrades to a template-only comparison and the deploy fails.
+  BOOTSTRAP=$(aws ssm get-parameter \
+    --name /cdk-bootstrap/hnb659fds/version \
+    --region "$TARGET_REGION" \
+    --query Parameter.Value --output text 2>/dev/null || true)
+  if [ -z "$BOOTSTRAP" ]; then
+    echo
+    echo "preflight: WARNING -- $TARGET_ACCOUNT/$TARGET_REGION is not CDK-bootstrapped."
+    echo "  cdk diff will fall back to a template-only comparison and cdk deploy WILL fail."
+    echo "  Run:  npx cdk bootstrap aws://$TARGET_ACCOUNT/$TARGET_REGION"
+    echo
+  else
+    echo "preflight: bootstrap version $BOOTSTRAP present in $TARGET_REGION"
+  fi
   exit 0
 fi
 

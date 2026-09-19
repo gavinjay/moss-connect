@@ -12,14 +12,15 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "cdk": "cdk",
-    "cdk:synth": "cdk synth --all",
-    "cdk:diff": "cdk diff --all",
+    "cdk:synth": "cdk synth",
+    "cdk:diff": "cdk diff",
     "cdk:deploy": "cdk deploy --all",
     "lint": "tsc --noEmit",
     "bench": "ts-node scripts/benchmark.ts",
     "preflight": "bash scripts/preflight.sh",
     "precdk:deploy": "bash scripts/preflight.sh",
-    "precdk:diff": "bash scripts/preflight.sh"
+    "precdk:diff": "bash scripts/preflight.sh",
+    "audit:accounts": "bash scripts/audit-accounts.sh"
   },
   "devDependencies": {
     "@huggingface/transformers": "^4.3.0",
