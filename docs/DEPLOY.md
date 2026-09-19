@@ -6,7 +6,7 @@
 every time — the shell's `AWS_REGION` is routinely pointed somewhere else:
 
 ```bash
-export AWS_PROFILE=claude-sandbox
+export AWS_PROFILE=<profile-for-184670915146>
 export AWS_REGION=us-west-2
 ```
 
@@ -23,7 +23,7 @@ Only two values, both in `cdk.json`:
 Then bootstrap, if you have not already:
 
 ```bash
-npx cdk bootstrap aws://576872909007/us-west-2
+npx cdk bootstrap aws://184670915146/us-west-2
 ```
 
 ## Deploy

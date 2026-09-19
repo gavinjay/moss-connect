@@ -8,13 +8,13 @@ Amazon Connect ↔ Moss integration. One manual; keep it here, don't fork it.
 
 | | |
 |---|---|
-| AWS profile | `claude-sandbox` |
-| Account | `576872909007` |
+| AWS profile | whichever maps to account 184670915146 |
+| Account | `184670915146` |
 | **Region** | **`us-west-2`** |
 | Stacks | `ConnectFoundationStack` (deploy once) + `MossConnectStack` (iterate) |
 
 ```bash
-AWS_PROFILE=claude-sandbox AWS_REGION=us-west-2 aws <cmd>
+AWS_PROFILE=<profile-for-184670915146> AWS_REGION=us-west-2 aws <cmd>
 ```
 
 ### Amazon Connect is NOT in us-east-2
