@@ -115,3 +115,40 @@ describe('benchmark arms', () => {
     expect(cfg.benchmark.bedrockKnowledgeBaseId).toBeNull();
   });
 });
+
+describe('target account', () => {
+  const arn = 'arn:aws:connect:us-west-2:111122223333:instance/2b88db70-9667-404a-b9ba-634da2adbfa6';
+
+  // The bug this guards: account came from CDK_DEFAULT_ACCOUNT, so a diff
+  // synthesized into whichever account the shell's credentials were for while
+  // every Connect reference pointed at the ARN's account. Nothing failed.
+  it('derives the account from the Connect instance ARN', () => {
+    const cfg = loadConfig(reader(withConnect({ instanceAlias: '', existingInstanceArn: arn })));
+    expect(cfg.account).toBe('111122223333');
+  });
+
+  it('rejects an instance ARN whose region disagrees with cdk.json', () => {
+    const wrongRegion = arn.replace('us-west-2', 'us-east-1');
+    expect(() =>
+      loadConfig(reader(withConnect({ instanceAlias: '', existingInstanceArn: wrongRegion }))),
+    ).toThrow(/cannot be adopted across regions/);
+  });
+
+  it('rejects an explicit account that disagrees with the ARN', () => {
+    expect(() =>
+      loadConfig(
+        reader({ ...withConnect({ instanceAlias: '', existingInstanceArn: arn }), account: '999988887777' }),
+      ),
+    ).toThrow(/These must agree/);
+  });
+
+  it('rejects a malformed instance ARN outright', () => {
+    expect(() =>
+      loadConfig(reader(withConnect({ instanceAlias: '', existingInstanceArn: 'not-an-arn' }))),
+    ).toThrow(/Not a valid Amazon Connect instance ARN/);
+  });
+
+  it('has no account to derive when creating a fresh instance', () => {
+    expect(loadConfig(reader(valid)).account).toBeNull();
+  });
+});

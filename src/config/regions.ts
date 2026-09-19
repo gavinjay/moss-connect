@@ -43,3 +43,30 @@ export function assertConnectRegion(region: string): ConnectRegion {
   }
   return region;
 }
+
+/**
+ * Parses a Connect instance ARN into its parts.
+ *
+ * The ARN is the single most authoritative statement of WHERE this deployment
+ * belongs -- it names the account and the region together. Deriving both from it
+ * removes any chance of the stack targeting one account while its Connect
+ * references point at another.
+ */
+export interface ParsedConnectArn {
+  readonly region: string;
+  readonly account: string;
+  readonly instanceId: string;
+}
+
+export function parseConnectInstanceArn(arn: string): ParsedConnectArn {
+  const match = /^arn:aws[a-z-]*:connect:([a-z0-9-]+):(\d{12}):instance\/([0-9a-fA-F-]+)$/.exec(
+    arn.trim(),
+  );
+  if (!match) {
+    throw new Error(
+      `Not a valid Amazon Connect instance ARN: "${arn}"\n` +
+        'Expected arn:aws:connect:<region>:<account-id>:instance/<instance-id>',
+    );
+  }
+  return { region: match[1], account: match[2], instanceId: match[3] };
+}

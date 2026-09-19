@@ -1,4 +1,4 @@
-import { assertConnectRegion, type ConnectRegion } from './regions';
+import { assertConnectRegion, parseConnectInstanceArn, type ConnectRegion } from './regions';
 
 /**
  * Deploy inputs come from cdk.json context and nowhere else.
@@ -84,6 +84,17 @@ export interface TagConfig {
 
 export interface MossConnectConfig {
   readonly region: ConnectRegion;
+  /**
+   * The AWS account this deployment belongs to, derived from the Connect
+   * instance ARN when one is given.
+   *
+   * This is NOT read from CDK_DEFAULT_ACCOUNT. An earlier version was, and a
+   * `cdk diff` duly synthesized both stacks into whichever account the shell's
+   * credentials happened to be for, while every Connect reference pointed at a
+   * different one. Nothing failed at synth; the cross-account wiring was only
+   * visible by reading the stack header.
+   */
+  readonly account: string | null;
   readonly connect: ConnectFoundationConfig;
   readonly voiceRetrieval: VoiceRetrievalConfig;
   readonly indexStore: IndexStoreConfig;
@@ -151,8 +162,32 @@ export function loadConfig(scope: ContextReader): MossConnectConfig {
 
   const phoneEnabled = phone.enabled !== false;
 
+  const region = assertConnectRegion(required<string>(raw.region, 'region'));
+
+  // When we adopt an instance, its ARN is authoritative for BOTH account and
+  // region. Disagreement between the ARN and cdk.json is always a mistake.
+  let account: string | null = blankToNull(raw.account);
+  if (existingInstanceArn) {
+    const parsed = parseConnectInstanceArn(existingInstanceArn);
+    if (parsed.region !== region) {
+      throw new Error(
+        `mossConnect.region is "${region}" but connect.existingInstanceArn is in ` +
+          `"${parsed.region}". A Connect instance cannot be adopted across regions -- ` +
+          'fix whichever one is wrong.',
+      );
+    }
+    if (account && account !== parsed.account) {
+      throw new Error(
+        `mossConnect.account is "${account}" but connect.existingInstanceArn belongs to ` +
+          `account "${parsed.account}". These must agree.`,
+      );
+    }
+    account = parsed.account;
+  }
+
   return {
-    region: assertConnectRegion(required<string>(raw.region, 'region')),
+    region,
+    account,
     connect: {
       instanceAlias,
       existingInstanceArn,

@@ -14,7 +14,7 @@ Amazon Connect ↔ Moss integration. One manual; keep it here, don't fork it.
 | Stacks | `ConnectFoundationStack` (deploy once) + `MossConnectStack` (iterate) |
 
 ```bash
-AWS_PROFILE=<profile-for-184670915146> AWS_REGION=us-west-2 aws <cmd>
+AWS_PROFILE="$MOSS_PROFILE" AWS_REGION=us-west-2 aws <cmd>
 ```
 
 ### Amazon Connect is NOT in us-east-2

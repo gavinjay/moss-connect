@@ -1,4 +1,4 @@
-import { pipeline, type FeatureExtractionPipeline } from '@xenova/transformers';
+import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
 import {
   RetrieverNotReadyError,
   type IndexSource,
@@ -33,8 +33,19 @@ import {
  * docs/MOSS_QUESTIONS.md.
  *
  * Model: Xenova/all-MiniLM-L6-v2 (384 dims, quantised ONNX), run via
- * transformers.js. Downloaded once and cached; no API key, no AWS, no network at
- * query time.
+ * @huggingface/transformers. Downloaded once and cached; no API key, no AWS, no
+ * network at query time.
+ *
+ * DEV-ONLY, AND DELIBERATELY SO. This file is imported by scripts/benchmark.ts
+ * and nothing else -- no Lambda handler touches it, so esbuild never bundles it
+ * and the package never reaches production. That matters: the predecessor
+ * package (@xenova/transformers) pulled in protobufjs 6.x with a critical
+ * arbitrary-code-execution advisory plus libvips CVEs via sharp, none of which
+ * this code uses. Swapped to the maintained successor, which audits clean.
+ *
+ * NOT EXECUTED IN CI: onnxruntime-node fetches a native binary at install time,
+ * which the sandboxed build environment blocks. Verify locally with
+ * `npm run bench -- --arms local-embed` before trusting a number from it.
  */
 export class LocalEmbedRetriever implements MossRetriever {
   private extractor: FeatureExtractionPipeline | null = null;
@@ -56,7 +67,7 @@ export class LocalEmbedRetriever implements MossRetriever {
           ? source.documents
           : (JSON.parse(new TextDecoder().decode(source.bytes)) as MossDocument[]);
 
-      this.extractor = await pipeline('feature-extraction', this.modelId, { quantized: true });
+      this.extractor = await pipeline('feature-extraction', this.modelId, { dtype: 'q8' });
       // Embedding the corpus is the real load cost, and it grows linearly with
       // the corpus. This is the number that becomes cold-start pain.
       this.vectors = [];

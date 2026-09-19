@@ -1,12 +1,40 @@
 # Deploy runbook
 
+## Pick the right account FIRST
+
+Three AWS accounts are in play and only one is correct:
+
+| Account | What it is |
+|---|---|
+| `184670915146` | **This project.** Where the `trackit-demo` Connect instance lives. |
+| `394125495069` | A different account these credentials may default to. |
+| `576872909007` | The `jarvis` sandbox. Nothing to do with this project. |
+
+The target account is derived from `connect.existingInstanceArn` in `cdk.json`,
+never from `CDK_DEFAULT_ACCOUNT`. If your credentials are for a different account
+the synth **fails** with both numbers printed, rather than quietly building a
+cross-account stack. An earlier version did exactly that: `cdk diff` reported
+`Stack ConnectFoundationStack (aws://394125495069/us-west-2)` while every Connect
+reference pointed at `184670915146`, and nothing complained.
+
+Confirm before every deploy:
+
+```bash
+export MOSS_PROFILE=your-profile-name      # the one for 184670915146
+export AWS_PROFILE="$MOSS_PROFILE" AWS_REGION=us-west-2
+aws sts get-caller-identity                # Account MUST read 184670915146
+```
+
+Do not paste a command containing `<angle brackets>` into zsh -- it reads them as
+redirects and silently fails to set the variable.
+
 ## Region
 
 **`us-west-2`.** Amazon Connect does not exist in `us-east-2`. Set it explicitly
 every time — the shell's `AWS_REGION` is routinely pointed somewhere else:
 
 ```bash
-export AWS_PROFILE=<profile-for-184670915146>
+export AWS_PROFILE="$MOSS_PROFILE"
 export AWS_REGION=us-west-2
 ```
 
