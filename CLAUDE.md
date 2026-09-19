@@ -14,8 +14,12 @@ Amazon Connect ↔ Moss integration. One manual; keep it here, don't fork it.
 | Stacks | `ConnectFoundationStack` (deploy once) + `MossConnectStack` (iterate) |
 
 ```bash
-AWS_PROFILE="$MOSS_PROFILE" AWS_REGION=us-west-2 aws <cmd>
+npm run preflight    # names the profile to use; substitute nothing by hand
 ```
+
+`preflight` reads the target account from the Connect instance ARN, compares it
+to your active credentials, and prints your real profile names with the account
+each one resolves to.
 
 ### Amazon Connect is NOT in us-east-2
 

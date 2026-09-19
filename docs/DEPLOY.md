@@ -43,7 +43,6 @@ npm run cdk:deploy
 every time — the shell's `AWS_REGION` is routinely pointed somewhere else:
 
 ```bash
-export AWS_PROFILE="$MOSS_PROFILE"
 export AWS_REGION=us-west-2
 ```
 
