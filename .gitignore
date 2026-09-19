@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.js
+*.d.ts
+!jest.config.js
+cdk.out/
+cdk.out.test-*/
+.cdk.staging/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+coverage/
+# Moss index artifacts are build output, never source
+index-artifacts/
+*.moss

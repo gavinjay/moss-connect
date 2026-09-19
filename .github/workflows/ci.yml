@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Includes a real Template.fromStack synth, so esbuild bundling of all
+      # three handlers is exercised here too.
+      - name: Test
+        run: npm test
+
+      # Guards the fail-closed contract: a synth with cdk.json's blank
+      # connectInstanceArn MUST fail. If this ever succeeds, a required deploy
+      # input has grown a silent default.
+      - name: Assert synth fails closed without a Connect instance ARN
+        run: |
+          if npm run cdk:synth --silent > /tmp/synth.log 2>&1; then
+            echo "::error::cdk synth succeeded without connectInstanceArn -- a required input has a silent default"
+            exit 1
+          fi
+          grep -q "connectInstanceArn" /tmp/synth.log || {
+            echo "::error::synth failed for an unexpected reason:"; cat /tmp/synth.log; exit 1; }
+          echo "synth failed closed as expected"

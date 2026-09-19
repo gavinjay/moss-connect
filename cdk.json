@@ -1,0 +1,39 @@
+{
+  "app": "npx ts-node --prefer-ts-exts bin/moss-connect.ts",
+  "watch": {
+    "include": ["**"],
+    "exclude": ["README.md", "cdk*.json", "**/*.d.ts", "**/*.js", "tsconfig.json", "package*.json", "yarn.lock", "node_modules", "test"]
+  },
+  "context": {
+    "mossConnect": {
+      "region": "us-west-2",
+      "connectInstanceArn": "",
+      "contactLensRealtimeEnabled": true,
+      "voiceRetrieval": {
+        "latencyBudgetMs": 120,
+        "provisionedConcurrency": 2,
+        "memoryMb": 2048,
+        "timeoutSeconds": 6
+      },
+      "indexStore": {
+        "retainOnDelete": true,
+        "manifestKey": "manifests/current.json"
+      },
+      "tags": {
+        "project": "Moss-Connect",
+        "owner": "Gavin Jay",
+        "awsApnId": "pc:95kvqdasagvgk51tnwem21dgu"
+      }
+    },
+    "aws-cdk:enableDiffNoFail": "true",
+    "@aws-cdk/core:stackRelativeExports": true,
+    "@aws-cdk/aws-lambda:recognizeLayerVersion": true,
+    "@aws-cdk/core:checkSecretUsage": true,
+    "@aws-cdk/aws-iam:minimizePolicies": true,
+    "@aws-cdk/core:validateSnapshotRemovalPolicy": true,
+    "@aws-cdk/aws-s3:createDefaultLoggingPolicy": true,
+    "@aws-cdk/aws-s3:serverAccessLogsUseBucketPolicy": true,
+    "@aws-cdk/aws-kms:aliasNameRef": true,
+    "@aws-cdk/core:newStyleStackSynthesis": true
+  }
+}
