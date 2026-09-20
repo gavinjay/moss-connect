@@ -86,13 +86,37 @@ fails, emits `Index.LoadFailed`, and every call escalates — designed behaviour
 a fresh stack deflects nothing. `bench/corpus.json` is a reasonable first corpus.
 
 Upload the **artifact first, manifest second**. A manifest naming a missing object
-breaks every consumer's next cold start.
+breaks every consumer's next cold start. `scripts/seed-index.ts` does both in that
+order, reusing the post-call indexer's own artifact and manifest functions, and
+discovers the bucket from the stack outputs:
+
+```bash
+npm run seed-index                              # bench/corpus.json
+npm run seed-index -- --corpus path/to/docs.json --force   # replace an existing manifest
+```
+
+Provisioned instances that already loaded an index keep it until they recycle.
+After seeding, publish a new Lambda version (any redeploy does) or wait.
 
 ### 2. Point the phone number at an arm's flow
 
 The flows are created; associating the claimed number with one of them is a
-console step (or `associate-phone-number-contact-flow`). Point it at whichever arm
-you are demonstrating — that is how you switch arms mid-demo without redeploying.
+console step or one CLI call. Point it at whichever arm you are demonstrating —
+that is how you switch arms mid-demo without redeploying. Every value below is
+discovered, none typed:
+
+```bash
+INSTANCE_ARN=$(aws cloudformation describe-stacks --stack-name ConnectFoundationStack \
+  --query "Stacks[0].Outputs[?OutputKey=='ConnectInstanceArn'].OutputValue" --output text)
+PHONE_ID=$(aws connect list-phone-numbers-v2 --target-arn "$INSTANCE_ARN" \
+  --query 'ListPhoneNumbersSummaryList[0].PhoneNumberId' --output text)
+FLOW_ARN=$(aws cloudformation describe-stacks --stack-name MossConnectStack \
+  --query "Stacks[0].Outputs[?OutputKey=='ArmlexicalFlowArn'].OutputValue" --output text)
+aws connect associate-phone-number-contact-flow --instance-id "$INSTANCE_ARN" \
+  --phone-number-id "$PHONE_ID" --contact-flow-id "${FLOW_ARN##*/}"
+```
+
+Swap `Armlexical` for `Armmoss` or `Armbedrockkb` to switch arms.
 
 ### 3. Create an agent login
 
