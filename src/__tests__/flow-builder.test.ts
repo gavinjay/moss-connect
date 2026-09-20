@@ -28,19 +28,19 @@ describe('buildDemoFlow', () => {
 
   it('invokes the Lambda alias, not $LATEST', () => {
     const invoke = flow.Actions.find((a) => a.Type === 'InvokeLambdaFunction')!;
-    expect(invoke.Parameters.LambdaFunctionARN).toBe(options.lambdaArn);
-    expect(String(invoke.Parameters.LambdaFunctionARN).endsWith(':live')).toBe(true);
+    expect(invoke.Parameters!.LambdaFunctionARN).toBe(options.lambdaArn);
+    expect(String(invoke.Parameters!.LambdaFunctionARN).endsWith(':live')).toBe(true);
   });
 
   // Connect abandons at 8s; we must return first so our escalate flag wins.
   it('leaves headroom under the Connect 8s invocation ceiling', () => {
     const invoke = flow.Actions.find((a) => a.Type === 'InvokeLambdaFunction')!;
-    expect(Number(invoke.Parameters.InvocationTimeLimitSeconds)).toBeLessThan(8);
+    expect(Number(invoke.Parameters!.InvocationTimeLimitSeconds)).toBeLessThan(8);
   });
 
   it('stamps the arm onto the contact so calls are attributable later', () => {
     const stamp = flow.Actions.find((a) => a.Identifier === 'stamp-arm')!;
-    expect((stamp.Parameters.Attributes as Record<string, string>).retrievalArm).toBe('lexical');
+    expect((stamp.Parameters!.Attributes as Record<string, string>).retrievalArm).toBe('lexical');
   });
 
   it('enables Contact Lens realtime, which feeds agent assist', () => {
@@ -50,7 +50,7 @@ describe('buildDemoFlow', () => {
 
   it('branches on resolved and escalates otherwise', () => {
     const compare = flow.Actions.find((a) => a.Type === 'Compare')!;
-    expect(compare.Parameters.ComparisonValue).toBe('$.External.resolved');
+    expect(compare.Parameters!.ComparisonValue).toBe('$.External.resolved');
     expect(compare.Transitions.Conditions?.[0].NextAction).toBe('play-answer');
     expect(compare.Transitions.NextAction).toBe('escalate');
   });
@@ -65,6 +65,37 @@ describe('buildDemoFlow', () => {
     const menu = flow.Actions.find((a) => a.Type === 'GetParticipantInput')!;
     const errorTargets = (menu.Transitions.Errors ?? []).map((e) => e.NextAction);
     expect(errorTargets).toContain('escalate');
+  });
+
+  // The next three pin shapes observed in flows exported from the live instance
+  // (describe-contact-flow, 2026-09-19). They are what CloudFormation checks.
+  it('gives the keypad block all three exported error branches', () => {
+    const menu = flow.Actions.find((a) => a.Type === 'GetParticipantInput')!;
+    const types = (menu.Transitions.Errors ?? []).map((e) => e.ErrorType).sort();
+    expect(types).toEqual(['InputTimeLimitExceeded', 'NoMatchingCondition', 'NoMatchingError']);
+  });
+
+  it('emits explicit Errors and Conditions arrays on every non-terminal action', () => {
+    for (const a of flow.Actions) {
+      if (a.Type === 'DisconnectParticipant') {
+        expect(a.Transitions).toEqual({});
+        continue;
+      }
+      expect(Array.isArray(a.Transitions.Errors)).toBe(true);
+      expect(Array.isArray(a.Transitions.Conditions)).toBe(true);
+    }
+  });
+
+  it('omits the Parameters key on TransferContactToQueue, as Connect exports it', () => {
+    const transfer = flow.Actions.find((a) => a.Type === 'TransferContactToQueue')!;
+    expect('Parameters' in transfer).toBe(false);
+    expect(JSON.parse(renderFlow(flow)).Actions.find((a: any) => a.Type === 'TransferContactToQueue'))
+      .not.toHaveProperty('Parameters');
+  });
+
+  it('positions every action for the console designer', () => {
+    const meta = flow.Metadata.ActionMetadata as Record<string, unknown>;
+    for (const a of flow.Actions) expect(meta[a.Identifier]).toBeDefined();
   });
 
   it('renders to a JSON string Connect can take as content', () => {

@@ -2,12 +2,22 @@
  * Amazon Connect contact-flow content, built as typed objects rather than
  * hand-written JSON.
  *
- * SCHEMA CAVEAT: Connect's flow-content schema is detailed and validated
- * server-side at deploy time. The action types and parameter names here are
- * modelled from the documented format but have NOT been round-tripped through a
- * live Connect instance yet. Connect rejects a malformed flow with a specific
- * error, so it is a fast feedback loop -- but treat the first deploy as the
- * validation step, and see docs/MOSS_QUESTIONS.md.
+ * SCHEMA: the action shapes below were taken from flows exported off the live
+ * `trackit-demo` instance with `describe-contact-flow` (2026-09-19), not from
+ * the documentation alone. Observed rules worth keeping:
+ *
+ *   - Every non-terminal action carries explicit `Errors: []` and
+ *     `Conditions: []` arrays, even when empty. `normalizeTransitions()` does it.
+ *   - `GetParticipantInput` needs a `NoMatchingCondition` error branch in
+ *     addition to `InputTimeLimitExceeded` and `NoMatchingError`.
+ *   - `TransferContactToQueue` has NO `Parameters` key at all.
+ *   - Terminal actions (`DisconnectParticipant`) have `Transitions: {}`.
+ *   - `MessageParticipant` and `UpdateContactRecordingBehavior` export with
+ *     `Errors: []` -- they do not take an error branch.
+ *
+ * `UpdateContactTextToSpeechVoice` and the `AnalyticsBehavior` block of
+ * `UpdateContactRecordingBehavior` did not appear in any sample flow and are
+ * modelled from the documentation.
  *
  * What IS verified here, by `validateFlow()` and its tests: every transition
  * target resolves to a real action, there is exactly one start action, and no
@@ -29,7 +39,8 @@ export interface FlowTransitions {
 export interface FlowAction {
   readonly Identifier: string;
   readonly Type: string;
-  readonly Parameters: Record<string, unknown>;
+  /** Absent on `TransferContactToQueue`, which Connect exports without the key. */
+  readonly Parameters?: Record<string, unknown>;
   readonly Transitions: FlowTransitions;
 }
 
@@ -104,6 +115,29 @@ export function validateFlow(flow: FlowContent): FlowContent {
   return flow;
 }
 
+/**
+ * Connect exports every non-terminal action with explicit `Errors` and
+ * `Conditions` arrays, empty or not. Emit the same shape rather than betting on
+ * the server tolerating their absence.
+ */
+export function normalizeTransitions(t: FlowTransitions): FlowTransitions {
+  if (!t.NextAction && !t.Conditions && !t.Errors) return {};
+  return { NextAction: t.NextAction, Errors: t.Errors ?? [], Conditions: t.Conditions ?? [] };
+}
+
+/**
+ * Canvas positions for the console. Connect does not need them to run the flow,
+ * but without them every block renders stacked at the origin when someone opens
+ * it in the designer -- which is exactly where a demo operator will be looking.
+ */
+function actionMetadata(actions: readonly FlowAction[]): Record<string, { position: { x: number; y: number } }> {
+  const meta: Record<string, { position: { x: number; y: number } }> = {};
+  actions.forEach((a, i) => {
+    meta[a.Identifier] = { position: { x: 200 + (i % 5) * 260, y: 60 + Math.floor(i / 5) * 200 } };
+  });
+  return meta;
+}
+
 export interface DemoFlowOptions {
   /** Lambda alias ARN to invoke. Must be associated with the instance. */
   readonly lambdaArn: string;
@@ -164,10 +198,12 @@ export function buildDemoFlow(options: DemoFlowOptions): FlowContent {
         Enabled: 'True',
         AnalyticsLanguage: 'en-US',
         AnalyticsRedactionBehavior: 'Disabled',
-        ChannelConfiguration: { Voice: { AnalyticsModes: ['RealTime', 'PostContact'] } },
+        // One mode per channel. RealTime includes the post-contact analysis.
+        ChannelConfiguration: { Voice: { AnalyticsModes: ['RealTime'] } },
       },
     },
-    Transitions: { NextAction: 'menu', Errors: [{ NextAction: 'menu', ErrorType: 'NoMatchingError' }] },
+    // Exported samples carry no error branch on this block.
+    Transitions: { NextAction: 'menu' },
   });
 
   const menuPrompt =
@@ -180,7 +216,6 @@ export function buildDemoFlow(options: DemoFlowOptions): FlowContent {
       Text: menuPrompt,
       InputTimeLimitSeconds: '8',
       StoreInput: 'False',
-      DTMFConfiguration: { DisableCancelKey: 'False' },
     },
     Transitions: {
       NextAction: 'escalate',
@@ -188,8 +223,10 @@ export function buildDemoFlow(options: DemoFlowOptions): FlowContent {
         NextAction: `query-${m.digit}`,
         Condition: { Operator: 'Equals', Operands: [m.digit] },
       })),
+      // All three branches are present on every exported GetParticipantInput.
       Errors: [
         { NextAction: 'escalate', ErrorType: 'InputTimeLimitExceeded' },
+        { NextAction: 'escalate', ErrorType: 'NoMatchingCondition' },
         { NextAction: 'escalate', ErrorType: 'NoMatchingError' },
       ],
     },
@@ -239,20 +276,14 @@ export function buildDemoFlow(options: DemoFlowOptions): FlowContent {
     Identifier: 'play-answer',
     Type: 'MessageParticipant',
     Parameters: { Text: "Here's what I found. $.External.answer" },
-    Transitions: {
-      NextAction: 'disconnect',
-      Errors: [{ NextAction: 'disconnect', ErrorType: 'NoMatchingError' }],
-    },
+    Transitions: { NextAction: 'disconnect' },
   });
 
   actions.push({
     Identifier: 'escalate',
     Type: 'MessageParticipant',
     Parameters: { Text: "Let me put you through to someone who can help." },
-    Transitions: {
-      NextAction: 'set-queue',
-      Errors: [{ NextAction: 'disconnect', ErrorType: 'NoMatchingError' }],
-    },
+    Transitions: { NextAction: 'set-queue' },
   });
 
   actions.push({
@@ -265,10 +296,11 @@ export function buildDemoFlow(options: DemoFlowOptions): FlowContent {
     },
   });
 
+  // No Parameters key: the exported block has none, and the target queue was
+  // set by the previous action.
   actions.push({
     Identifier: 'transfer',
     Type: 'TransferContactToQueue',
-    Parameters: {},
     Transitions: {
       NextAction: 'disconnect',
       Errors: [
@@ -285,11 +317,16 @@ export function buildDemoFlow(options: DemoFlowOptions): FlowContent {
     Transitions: {},
   });
 
+  const normalized = actions.map((a) => ({ ...a, Transitions: normalizeTransitions(a.Transitions) }));
   return validateFlow({
     Version: FLOW_VERSION,
     StartAction: 'set-voice',
-    Metadata: { entryPointPosition: { x: 20, y: 20 }, ActionMetadata: {} },
-    Actions: actions,
+    Metadata: {
+      entryPointPosition: { x: 20, y: 20 },
+      snapToGrid: false,
+      ActionMetadata: actionMetadata(normalized),
+    },
+    Actions: normalized,
   });
 }
 
