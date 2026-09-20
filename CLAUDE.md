@@ -1,5 +1,9 @@
 # moss-connect — Agent Operating Manual
 
+> **Picking this up fresh? Read `docs/HANDOFF.md` first** — it records what is
+> deployed right now, why the last deploy failed, and what is most likely to
+> break next. This file is the standing rules; that file is the current state.
+
 Amazon Connect ↔ Moss integration. One manual; keep it here, don't fork it.
 
 ---

@@ -42,6 +42,32 @@ export interface PhoneNumberConfig {
   readonly description: string;
 }
 
+/**
+ * Amazon Connect permits exactly ONE storage config per resource type per
+ * instance. An instance created by hand in the console usually already has
+ * CALL_RECORDINGS, so adding ours is rejected with a 409 AlreadyExists and takes
+ * the whole stack down with it.
+ *
+ * Adopting an instance means not assuming we own its storage.
+ */
+export interface StorageConfigOwnership {
+  /**
+   * Manage the CALL_RECORDINGS config (Contact Lens post-call analysis lands
+   * under it). Leave false for an adopted instance that already has one.
+   *
+   * CONSEQUENCE when false: post-call analysis goes to whatever bucket the
+   * existing config names, NOT our analysis bucket, so the post-call index is
+   * never rebuilt. Repoint the existing config by hand if you need that surface.
+   */
+  readonly callRecordings: boolean;
+  /**
+   * Manage REAL_TIME_CONTACT_ANALYSIS_VOICE_SEGMENTS -> our Kinesis stream.
+   * Agent assist receives nothing without it. Not a default on a new instance,
+   * so this is usually safe to leave on.
+   */
+  readonly realtimeAnalytics: boolean;
+}
+
 export interface ConnectFoundationConfig {
   /**
    * Alias for a newly created instance. **Globally unique across all of AWS**,
@@ -54,6 +80,7 @@ export interface ConnectFoundationConfig {
   readonly inboundCalls: boolean;
   readonly outboundCalls: boolean;
   readonly phoneNumber: PhoneNumberConfig;
+  readonly storageConfigs: StorageConfigOwnership;
 }
 
 export interface VoiceRetrievalConfig {
@@ -127,6 +154,7 @@ export function loadConfig(scope: ContextReader): MossConnectConfig {
 
   const connect = (raw.connect ?? {}) as Record<string, any>;
   const phone = (connect.phoneNumber ?? {}) as Record<string, any>;
+  const storage = (connect.storageConfigs ?? {}) as Record<string, any>;
   const voice = (raw.voiceRetrieval ?? {}) as Record<string, any>;
   const store = (raw.indexStore ?? {}) as Record<string, any>;
   const bench = (raw.benchmark ?? {}) as Record<string, any>;
@@ -200,6 +228,12 @@ export function loadConfig(scope: ContextReader): MossConnectConfig {
           : 'US',
         type: parsePhoneType(phone.type, phoneEnabled),
         description: phone.description ?? 'moss-connect',
+      },
+      storageConfigs: {
+        // Default false: an adopted instance most likely already has one, and a
+        // duplicate is a hard 409 that fails the deploy.
+        callRecordings: storage.callRecordings === true,
+        realtimeAnalytics: storage.realtimeAnalytics !== false,
       },
     },
     voiceRetrieval: {

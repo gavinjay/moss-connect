@@ -152,8 +152,10 @@ describe('MossConnectStack', () => {
     app.resourceCountIs('AWS::Connect::IntegrationAssociation', 3);
   });
 
-  it('wires Contact Lens realtime to Kinesis and recordings to S3', () => {
-    app.resourceCountIs('AWS::Connect::InstanceStorageConfig', 2);
+  // Only realtime by default. Call recordings are left alone on an adopted
+  // instance -- see the storage-config ownership block below.
+  it('wires Contact Lens realtime to Kinesis', () => {
+    app.resourceCountIs('AWS::Connect::InstanceStorageConfig', 1);
     app.hasResourceProperties('AWS::Connect::InstanceStorageConfig', {
       ResourceType: 'REAL_TIME_CONTACT_ANALYSIS_VOICE_SEGMENTS',
       StorageType: 'KINESIS_STREAM',
@@ -213,5 +215,35 @@ describe('fail-closed synth', () => {
 
   it('refuses to create an instance with no alias', () => {
     expect(() => synth({ connect: { ...base.connect, instanceAlias: '' } })).toThrow(/instanceAlias/);
+  });
+});
+
+describe('Connect storage config ownership', () => {
+  // The real 409 that killed the first deploy: trackit-demo already had a
+  // CALL_RECORDINGS config, and Connect permits exactly one per type.
+  it('omits the call-recordings config by default', () => {
+    const { app } = synth();
+    const configs = Object.values(app.findResources('AWS::Connect::InstanceStorageConfig'));
+    const types = configs.map((c: any) => c.Properties.ResourceType);
+    expect(types).not.toContain('CALL_RECORDINGS');
+    expect(types).toContain('REAL_TIME_CONTACT_ANALYSIS_VOICE_SEGMENTS');
+  });
+
+  it('creates it when we explicitly claim ownership', () => {
+    const { app } = synth({
+      connect: { ...base.connect, storageConfigs: { callRecordings: true, realtimeAnalytics: true } },
+    });
+    app.resourceCountIs('AWS::Connect::InstanceStorageConfig', 2);
+    app.hasResourceProperties('AWS::Connect::InstanceStorageConfig', {
+      ResourceType: 'CALL_RECORDINGS',
+      StorageType: 'S3',
+    });
+  });
+
+  it('can disable both', () => {
+    const { app } = synth({
+      connect: { ...base.connect, storageConfigs: { callRecordings: false, realtimeAnalytics: false } },
+    });
+    app.resourceCountIs('AWS::Connect::InstanceStorageConfig', 0);
   });
 });

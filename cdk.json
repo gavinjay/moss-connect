@@ -30,7 +30,12 @@
           "type": "DID",
           "description": "moss-connect benchmark demo line"
         },
-        "_comment_existingInstanceArn": "trackit-demo, created by hand in the us-west-2 console. CDK ADOPTS it. Leave instanceAlias blank: setting it makes CDK try to CREATE a second instance with an alias that is already taken, and the deploy fails minutes in."
+        "_comment_existingInstanceArn": "trackit-demo, created by hand in the us-west-2 console. CDK ADOPTS it. Leave instanceAlias blank: setting it makes CDK try to CREATE a second instance with an alias that is already taken, and the deploy fails minutes in.",
+        "storageConfigs": {
+          "callRecordings": false,
+          "realtimeAnalytics": true
+        },
+        "_comment_storageConfigs": "trackit-demo already has a CALL_RECORDINGS config from console creation; a second is rejected 409 AlreadyExists and fails the stack. Consequence of false: post-call analysis lands in the existing config's bucket, not ours, so the post-call index is never rebuilt until that config is repointed by hand."
       },
       "voiceRetrieval": {
         "latencyBudgetMs": 120,

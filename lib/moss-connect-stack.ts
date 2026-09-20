@@ -61,19 +61,21 @@ export class MossConnectStack extends Stack {
       analysisPrefix: 'Analysis/',
     });
 
-    // Post-call Contact Lens analysis is written alongside call recordings.
-    // VERIFY ON FIRST DEPLOY that analysis lands under the Analysis/ prefix the
-    // PostCallIndex notification filters on -- if the prefix differs, the
-    // notification silently never fires and no index is ever rebuilt.
-    new connect.CfnInstanceStorageConfig(this, 'CallRecordingStorage', {
-      instanceArn: connectInstanceArn,
-      resourceType: 'CALL_RECORDINGS',
-      storageType: 'S3',
-      s3Config: {
-        bucketName: postCall.analysisBucket.bucketName,
-        bucketPrefix: 'Analysis',
-      },
-    });
+    // Connect allows exactly ONE storage config per resource type per instance.
+    // An instance created in the console already has CALL_RECORDINGS, and adding
+    // a second returns 409 AlreadyExists and fails the whole stack -- which is
+    // exactly what happened on the first real deploy against trackit-demo.
+    if (config.connect.storageConfigs.callRecordings) {
+      new connect.CfnInstanceStorageConfig(this, 'CallRecordingStorage', {
+        instanceArn: connectInstanceArn,
+        resourceType: 'CALL_RECORDINGS',
+        storageType: 'S3',
+        s3Config: {
+          bucketName: postCall.analysisBucket.bucketName,
+          bucketPrefix: 'Analysis',
+        },
+      });
+    }
 
     const assist = new AgentAssist(this, 'AgentAssist', {
       indexBucket: indexStore.bucket,
@@ -84,12 +86,14 @@ export class MossConnectStack extends Stack {
     // Real-time analytics streaming. The flow must ALSO enable analytics
     // (flow-builder.ts does) -- this config alone is not enough, and neither is
     // the flow alone. Miss either and the agent-assist Lambda simply never fires.
-    new connect.CfnInstanceStorageConfig(this, 'RealtimeAnalyticsStorage', {
-      instanceArn: connectInstanceArn,
-      resourceType: 'REAL_TIME_CONTACT_ANALYSIS_VOICE_SEGMENTS',
-      storageType: 'KINESIS_STREAM',
-      kinesisStreamConfig: { streamArn: assist.stream.streamArn },
-    });
+    if (config.connect.storageConfigs.realtimeAnalytics) {
+      new connect.CfnInstanceStorageConfig(this, 'RealtimeAnalyticsStorage', {
+        instanceArn: connectInstanceArn,
+        resourceType: 'REAL_TIME_CONTACT_ANALYSIS_VOICE_SEGMENTS',
+        storageType: 'KINESIS_STREAM',
+        kinesisStreamConfig: { streamArn: assist.stream.streamArn },
+      });
+    }
 
     new CfnOutput(this, 'IndexBucketName', { value: indexStore.bucket.bucketName });
     new CfnOutput(this, 'AnalysisBucketName', { value: postCall.analysisBucket.bucketName });
