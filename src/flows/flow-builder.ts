@@ -15,9 +15,10 @@
  *   - `MessageParticipant` and `UpdateContactRecordingBehavior` export with
  *     `Errors: []` -- they do not take an error branch.
  *
- * `UpdateContactTextToSpeechVoice` and the `AnalyticsBehavior` block of
- * `UpdateContactRecordingBehavior` did not appear in any sample flow and are
- * modelled from the documentation.
+ * `UpdateContactTextToSpeechVoice` and the `AnalyticsBehavior` block did not
+ * appear in any sample flow; both were validated by round-tripping the rendered
+ * flow through `create-contact-flow`, which returns the specific problem list
+ * that CloudFormation's bare InvalidContactFlowException hides.
  *
  * What IS verified here, by `validateFlow()` and its tests: every transition
  * target resolves to a real action, there is exactly one start action, and no
@@ -194,10 +195,14 @@ export function buildDemoFlow(options: DemoFlowOptions): FlowContent {
     Type: 'UpdateContactRecordingBehavior',
     Parameters: {
       RecordingBehavior: { RecordedParticipants: ['Agent', 'Customer'] },
+      // No AnalyticsRedaction* keys. The documented `AnalyticsRedactionBehavior:
+      // 'Disabled'` is rejected by the live service ("Missing required property:
+      // AnalyticsRedactionPolicy", a key the docs do not describe). Redaction
+      // is off by default, so omitting the keys entirely is both accepted and
+      // equivalent. Verified with create-contact-flow on 2026-09-19.
       AnalyticsBehavior: {
         Enabled: 'True',
         AnalyticsLanguage: 'en-US',
-        AnalyticsRedactionBehavior: 'Disabled',
         // One mode per channel. RealTime includes the post-contact analysis.
         ChannelConfiguration: { Voice: { AnalyticsModes: ['RealTime'] } },
       },

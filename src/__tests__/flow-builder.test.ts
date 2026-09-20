@@ -48,6 +48,13 @@ describe('buildDemoFlow', () => {
     expect(JSON.stringify(analytics.Parameters)).toContain('RealTime');
   });
 
+  // The live service rejects any AnalyticsRedaction* key unless an undocumented
+  // AnalyticsRedactionPolicy is also present. Redaction is off by default.
+  it('sends no redaction keys in the analytics block', () => {
+    const analytics = flow.Actions.find((a) => a.Type === 'UpdateContactRecordingBehavior')!;
+    expect(JSON.stringify(analytics.Parameters)).not.toContain('AnalyticsRedaction');
+  });
+
   it('branches on resolved and escalates otherwise', () => {
     const compare = flow.Actions.find((a) => a.Type === 'Compare')!;
     expect(compare.Parameters!.ComparisonValue).toBe('$.External.resolved');

@@ -99,14 +99,14 @@ export class VoiceRetrieval extends Construct {
     });
 
     /**
-     * OPEN QUESTION (docs/MOSS_QUESTIONS.md): we associate the ALIAS arn, since
-     * invoking $LATEST would make provisioned concurrency useless. Confirm on
-     * first deploy that Connect accepts a qualified ARN. If it rejects it,
-     * associate `this.fn.functionArn` and accept cold starts -- but do NOT
-     * silently switch, because that discards the warm path while every test
-     * still passes and the benchmark would quietly measure the wrong thing.
+     * We associate the ALIAS arn, since invoking $LATEST would make provisioned
+     * concurrency useless. VERIFIED 2026-09-19: Connect accepts the qualified
+     * ARN (the association reached CREATE_COMPLETE against trackit-demo). Do
+     * NOT switch this to `this.fn.functionArn` -- that discards the warm path
+     * while every test still passes and the benchmark quietly measures the
+     * wrong thing.
      */
-    new connect.CfnIntegrationAssociation(this, 'ConnectAssociation', {
+    const association = new connect.CfnIntegrationAssociation(this, 'ConnectAssociation', {
       instanceId: props.connectInstanceArn,
       integrationType: 'LAMBDA_FUNCTION',
       integrationArn: this.alias.functionArn,
@@ -126,6 +126,12 @@ export class VoiceRetrieval extends Construct {
         }),
       ),
     });
+
+    // Connect validates flow content without checking the Lambda is associated
+    // (confirmed: it accepted a flow naming a non-existent function), so this is
+    // about ordering, not correctness -- the flow should never exist in a state
+    // where its invoke block points at an unassociated function.
+    this.flow.addDependency(association);
 
     this.addAlarms(arm, props.latencyBudgetMs);
   }
